@@ -251,6 +251,21 @@ pub enum Event<T: 'static> {
     ///
     /// - **macOS / Wayland / Windows / Orbital:** Unsupported.
     MemoryWarning,
+
+    /// Emitted when the event loop receives an event that only occurs on some specific platform.
+    PlatformSpecific(PlatformSpecific),
+}
+
+/// Describes an event from some specific platform.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PlatformSpecific {
+    MacOS(MacOS),
+}
+
+/// Describes an event that only happens in `MacOS`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MacOS {
+    ReceivedUrl(String),
 }
 
 impl<T> Event<T> {
@@ -267,6 +282,7 @@ impl<T> Event<T> {
             Suspended => Ok(Suspended),
             Resumed => Ok(Resumed),
             MemoryWarning => Ok(MemoryWarning),
+            PlatformSpecific(event) => Ok(PlatformSpecific(event)),
         }
     }
 }
