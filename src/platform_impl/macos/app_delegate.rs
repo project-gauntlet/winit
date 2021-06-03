@@ -4,10 +4,20 @@ use icrate::Foundation::NSObject;
 use objc2::declare::{IvarBool, IvarEncode};
 use objc2::rc::Id;
 use objc2::runtime::AnyObject;
-use objc2::{declare_class, msg_send, msg_send_id, mutability, ClassType};
+use objc2::{class, declare_class, msg_send, msg_send_id, mutability, sel, ClassType};
+
+use crate::event::{Event, MacOS, PlatformSpecific};
 
 use super::app_state::AppState;
 use super::appkit::NSApplicationActivationPolicy;
+
+/// Apple constants
+#[allow(non_upper_case_globals)]
+pub const kInternetEventClass: u32 = 0x4755524c;
+#[allow(non_upper_case_globals)]
+pub const kAEGetURL: u32 = 0x4755524c;
+#[allow(non_upper_case_globals)]
+pub const keyDirectObject: u32 = 0x2d2d2d2d;
 
 declare_class!(
     #[derive(Debug)]
@@ -52,6 +62,33 @@ declare_class!(
             );
         }
 
+        #[method(applicationWillFinishLaunching:)]
+        fn will_finish_launching(&self, _sender: Option<&AnyObject>) {
+            trace_scope!("applicationWillFinishLaunching");
+
+            unsafe {
+                let event_manager = class!(NSAppleEventManager);
+                let shared_manager: *mut AnyObject =
+                    msg_send![event_manager, sharedAppleEventManager];
+
+                let () = msg_send![shared_manager,
+                    setEventHandler: self
+                    andSelector: sel!(handleEvent:withReplyEvent:)
+                    forEventClass: kInternetEventClass
+                    andEventID: kAEGetURL
+                ];
+            }
+        }
+
+        #[method(handleEvent:withReplyEvent:)]
+        fn handle_url(&self, event: *mut AnyObject, _reply: u64) {
+            if let Some(string) = parse_url(event) {
+                AppState::queue_event(Event::PlatformSpecific(PlatformSpecific::MacOS(
+                    MacOS::ReceivedUrl(string),
+                )));
+            }
+        }
+
         #[method(applicationWillTerminate:)]
         fn will_terminate(&self, _sender: Option<&AnyObject>) {
             trace_scope!("applicationWillTerminate:");
@@ -74,6 +111,28 @@ impl ApplicationDelegate {
                 defaultMenu: default_menu,
                 activateIgnoringOtherApps: activate_ignoring_other_apps,
             ]
+        }
+    }
+}
+
+fn parse_url(event: *mut AnyObject) -> Option<String> {
+    unsafe {
+        let class: u32 = msg_send![event, eventClass];
+        let id: u32 = msg_send![event, eventID];
+        if class != kInternetEventClass || id != kAEGetURL {
+            return None;
+        }
+        let subevent: *mut AnyObject = msg_send![event, paramDescriptorForKeyword: keyDirectObject];
+        let nsstring: *mut AnyObject = msg_send![subevent, stringValue];
+        let cstr: *const i8 = msg_send![nsstring, UTF8String];
+        if !cstr.is_null() {
+            Some(
+                std::ffi::CStr::from_ptr(cstr)
+                    .to_string_lossy()
+                    .into_owned(),
+            )
+        } else {
+            None
         }
     }
 }
