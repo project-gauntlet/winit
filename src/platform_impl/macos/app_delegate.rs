@@ -1,27 +1,17 @@
 use crate::event::{Event, MacOS, PlatformSpecific};
 use crate::platform::macos::ActivationPolicy;
 use crate::platform_impl::platform::{app_state::AppState, event::EventWrapper};
-use cocoa::base::id;
-use objc::{
-    declare::ClassDecl,
-    runtime::{Class, Object, Sel},
-};
 
-use std::{
-    cell::{RefCell, RefMut},
-    os::raw::c_void,
-};
-
-use crate::platform_impl::platform::{app_state::AppState, event::EventWrapper};
-use crate::{event::Event, platform::macos::ActivationPolicy};
 use cocoa::base::id;
 use objc::{
     declare::ClassDecl,
     runtime::{Class, Object, Sel},
 };
 use once_cell::sync::Lazy;
-
-use crate::{platform::macos::ActivationPolicy, platform_impl::platform::app_state::AppState};
+use std::{
+    cell::{RefCell, RefMut},
+    os::raw::c_void,
+};
 
 static AUX_DELEGATE_STATE_NAME: &str = "auxState";
 
