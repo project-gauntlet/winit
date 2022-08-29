@@ -455,7 +455,7 @@ extern "C" fn window_will_exit_fullscreen(this: &Object, _: Sel, _: id) {
 }
 
 extern "C" fn window_will_use_fullscreen_presentation_options(
-    this: &Object,
+    _this: &Object,
     _: Sel,
     _: id,
     proposed_options: NSUInteger,
