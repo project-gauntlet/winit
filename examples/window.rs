@@ -17,17 +17,38 @@ fn main() {
         .build(&event_loop)
         .unwrap();
 
+    // Allow us to drop the window.
+    let mut window = Some(window);
+
+    let mut timer = std::time::Instant::now();
     event_loop.run(move |event, _, control_flow| {
-        control_flow.set_wait();
-        println!("{:?}", event);
+        // Check if we're polling (waiting mode) and that enough time has elapsed.
+        if *control_flow == winit::event_loop::ControlFlow::Poll
+            && timer.elapsed() > std::time::Duration::from_millis(300)
+        {
+            // Now, we can safely request to exit the loop and drop the resources.
+            control_flow.set_exit();
+        }
 
         match event {
+            // This event is emitted once, at the start of the application.
+            Event::Resumed => {
+                // Set `control_flow` to `wait` only once.
+                control_flow.set_wait();
+            }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
-                window_id,
-            } if window_id == window.id() => control_flow.set_exit(),
+                ..
+            } => {
+                // We'll be polling our own timer from now on.
+                control_flow.set_poll();
+                timer = std::time::Instant::now();
+
+                // Drop the window (starts the animation).
+                window.take();
+            }
             Event::MainEventsCleared => {
-                window.request_redraw();
+                window.as_ref().map(|w| w.request_redraw());
             }
             _ => (),
         }
