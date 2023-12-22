@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::ops::Deref;
 use std::rc::{Rc, Weak};
 use std::sync::{Arc, Mutex};
 
@@ -50,7 +51,8 @@ pub struct Common {
     pub window: web_sys::Window,
     pub document: Document,
     /// Note: resizing the HTMLCanvasElement should go through `backend::set_canvas_size` to ensure the DPI factor is maintained.
-    pub raw: HtmlCanvasElement,
+    /// Note: this is read-only because we use a pointer to this for [`WindowHandle`](rwh_06::WindowHandle).
+    raw: Rc<HtmlCanvasElement>,
     style: CssStyleDeclaration,
     old_size: Rc<Cell<PhysicalSize<u32>>>,
     current_size: Rc<Cell<PhysicalSize<u32>>>,
@@ -102,7 +104,7 @@ impl Canvas {
         let common = Common {
             window: window.clone(),
             document: document.clone(),
-            raw: canvas.clone(),
+            raw: Rc::new(canvas.clone()),
             style,
             old_size: Rc::default(),
             current_size: Rc::default(),
@@ -552,7 +554,11 @@ impl Common {
         E: 'static + AsRef<web_sys::Event> + wasm_bindgen::convert::FromWasmAbi,
         F: 'static + FnMut(E),
     {
-        EventListenerHandle::new(self.raw.clone(), event_name, Closure::new(handler))
+        EventListenerHandle::new(self.raw.deref().clone(), event_name, Closure::new(handler))
+    }
+
+    pub fn raw(&self) -> &HtmlCanvasElement {
+        &self.raw
     }
 
     // The difference between add_event and add_user_event is that the latter has a special meaning
