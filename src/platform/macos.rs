@@ -234,6 +234,8 @@ pub trait WindowAttributesExtMacOS {
     fn with_option_as_alt(self, option_as_alt: OptionAsAlt) -> Self;
     /// See [`WindowExtMacOS::set_borderless_game`] for details on what this means if set.
     fn with_borderless_game(self, borderless_game: bool) -> Self;
+
+    fn with_kind(self, kind: WindowKind) -> Self;
 }
 
 impl WindowAttributesExtMacOS for WindowAttributes {
@@ -306,6 +308,12 @@ impl WindowAttributesExtMacOS for WindowAttributes {
     #[inline]
     fn with_borderless_game(mut self, borderless_game: bool) -> Self {
         self.platform_specific.borderless_game = borderless_game;
+        self
+    }
+
+    #[inline]
+    fn with_kind(mut self, kind: WindowKind) -> Self {
+        self.platform_specific.kind = kind;
         self
     }
 }
@@ -458,4 +466,13 @@ pub enum OptionAsAlt {
     /// No special handling is applied for `Option` key.
     #[default]
     None,
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum WindowKind {
+    #[default]
+    Normal,
+
+    Popup,
 }
