@@ -8,14 +8,7 @@ use monitor::VideoModeHandle;
 use objc2::rc::{autoreleasepool, Retained};
 use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2::{declare_class, msg_send_id, mutability, sel, ClassType, DeclaredClass};
-use objc2_app_kit::{
-    NSAppKitVersionNumber, NSAppKitVersionNumber10_12, NSAppearance, NSApplication,
-    NSApplicationPresentationOptions, NSBackingStoreType, NSDraggingDestination,
-    NSFilenamesPboardType, NSPasteboard, NSRequestUserAttentionType, NSScreen, NSView,
-    NSWindowButton, NSWindowDelegate, NSWindowFullScreenButton, NSWindowLevel,
-    NSWindowOcclusionState, NSWindowOrderingMode, NSWindowSharingType, NSWindowStyleMask,
-    NSWindowTabbingMode, NSWindowTitleVisibility,
-};
+use objc2_app_kit::{NSAppKitVersionNumber, NSAppKitVersionNumber10_12, NSAppearance, NSApplication, NSApplicationPresentationOptions, NSBackingStoreType, NSDraggingDestination, NSFilenamesPboardType, NSPasteboard, NSRequestUserAttentionType, NSScreen, NSView, NSWindow, NSWindowButton, NSWindowDelegate, NSWindowFullScreenButton, NSWindowLevel, NSWindowOcclusionState, NSWindowOrderingMode, NSWindowSharingType, NSWindowStyleMask, NSWindowTabbingMode, NSWindowTitleVisibility};
 use objc2_foundation::{
     ns_string, CGFloat, MainThreadMarker, NSArray, NSCopying, NSDistributedNotificationCenter,
     NSObject, NSObjectNSDelayedPerforming, NSObjectNSThreadPerformAdditions, NSObjectProtocol,
@@ -27,12 +20,12 @@ use super::cursor::cursor_from_icon;
 use super::monitor::{self, flip_window_screen_coordinates, get_display_id};
 use super::observer::RunLoop;
 use super::view::WinitView;
-use super::window::WinitWindow;
+use super::window::{ns_window_id, WinitPanel, WinitWindow};
 use super::{ffi, Fullscreen, MonitorHandle, OsError, WindowId};
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize, Position, Size};
 use crate::error::{ExternalError, NotSupportedError, OsError as RootOsError};
 use crate::event::{InnerSizeWriter, WindowEvent};
-use crate::platform::macos::{OptionAsAlt, WindowExtMacOS};
+use crate::platform::macos::{OptionAsAlt, WindowExtMacOS, WindowKind};
 use crate::window::{
     Cursor, CursorGrabMode, Icon, ImePurpose, ResizeDirection, Theme, UserAttentionType,
     WindowAttributes, WindowButtons, WindowLevel,
@@ -40,6 +33,7 @@ use crate::window::{
 
 #[derive(Clone, Debug)]
 pub struct PlatformSpecificWindowAttributes {
+    pub kind: WindowKind,
     pub movable_by_window_background: bool,
     pub titlebar_transparent: bool,
     pub title_hidden: bool,
@@ -57,6 +51,7 @@ impl Default for PlatformSpecificWindowAttributes {
     #[inline]
     fn default() -> Self {
         Self {
+            kind: Default::default(),
             movable_by_window_background: false,
             titlebar_transparent: false,
             title_hidden: false,
@@ -77,7 +72,7 @@ pub(crate) struct State {
     /// Strong reference to the global application state.
     app_delegate: Retained<ApplicationDelegate>,
 
-    window: Retained<WinitWindow>,
+    window: Retained<NSWindow>,
 
     current_theme: Cell<Option<Theme>>,
 
@@ -449,7 +444,7 @@ fn new_window(
     app_delegate: &ApplicationDelegate,
     attrs: &WindowAttributes,
     mtm: MainThreadMarker,
-) -> Option<Retained<WinitWindow>> {
+) -> Option<Retained<NSWindow>> {
     autoreleasepool(|_| {
         let screen = match attrs.fullscreen.clone().map(Into::into) {
             Some(Fullscreen::Borderless(Some(monitor)))
@@ -521,16 +516,35 @@ fn new_window(
             masks |= NSWindowStyleMask::FullSizeContentView;
         }
 
-        let window: Option<Retained<WinitWindow>> = unsafe {
-            msg_send_id![
-                super(mtm.alloc().set_ivars(())),
-                initWithContentRect: frame,
-                styleMask: masks,
-                backing: NSBackingStoreType::NSBackingStoreBuffered,
-                defer: false,
-            ]
+        let window: Retained<NSWindow> = match attrs.platform_specific.kind {
+            WindowKind::Normal => {
+                let window: Option<Retained<WinitWindow>> = unsafe {
+                    msg_send_id![
+                        super(mtm.alloc().set_ivars(())),
+                        initWithContentRect: frame,
+                        styleMask: masks,
+                        backing: NSBackingStoreType::NSBackingStoreBuffered,
+                        defer: false,
+                    ]
+                };
+
+                window?.as_super().retain()
+            }
+            WindowKind::Popup => {
+                masks |= NSWindowStyleMask::NonactivatingPanel;
+                let window: Option<Retained<WinitPanel>> = unsafe {
+                    msg_send_id![
+                        super(mtm.alloc().set_ivars(())),
+                        initWithContentRect: frame,
+                        styleMask: masks,
+                        backing: NSBackingStoreType::NSBackingStoreBuffered,
+                        defer: false,
+                    ]
+                };
+
+                window?.as_super().as_super().retain()
+            }
         };
-        let window = window?;
 
         // It is very important for correct memory management that we
         // disable the extra release that would otherwise happen when
@@ -759,17 +773,17 @@ impl WindowDelegate {
     }
 
     #[track_caller]
-    pub(super) fn window(&self) -> &WinitWindow {
+    pub(super) fn window(&self) -> &NSWindow {
         &self.ivars().window
     }
 
     #[track_caller]
     pub(crate) fn id(&self) -> WindowId {
-        self.window().id()
+        ns_window_id(self.window())
     }
 
     pub(crate) fn queue_event(&self, event: WindowEvent) {
-        self.ivars().app_delegate.maybe_queue_window_event(self.window().id(), event);
+        self.ivars().app_delegate.maybe_queue_window_event(ns_window_id(self.window()), event);
     }
 
     fn handle_scale_factor_changed(&self, scale_factor: CGFloat) {
@@ -782,7 +796,7 @@ impl WindowDelegate {
         let suggested_size = content_size.to_physical(scale_factor);
         let new_inner_size = Arc::new(Mutex::new(suggested_size));
         app_delegate.handle_window_event(
-            window.id(),
+            ns_window_id(window),
             WindowEvent::ScaleFactorChanged {
                 scale_factor,
                 inner_size_writer: InnerSizeWriter::new(Arc::downgrade(&new_inner_size)),
@@ -796,7 +810,7 @@ impl WindowDelegate {
             let size = NSSize::new(logical_size.width, logical_size.height);
             window.setContentSize(size);
         }
-        app_delegate.handle_window_event(window.id(), WindowEvent::Resized(physical_size));
+        app_delegate.handle_window_event(ns_window_id(window), WindowEvent::Resized(physical_size));
     }
 
     fn emit_move_event(&self) {
@@ -854,7 +868,7 @@ impl WindowDelegate {
     }
 
     pub fn request_redraw(&self) {
-        self.ivars().app_delegate.queue_redraw(self.window().id());
+        self.ivars().app_delegate.queue_redraw(ns_window_id(self.window()));
     }
 
     #[inline]
@@ -1349,7 +1363,7 @@ impl WindowDelegate {
 
         self.ivars().fullscreen.replace(fullscreen.clone());
 
-        fn toggle_fullscreen(window: &WinitWindow) {
+        fn toggle_fullscreen(window: &NSWindow) {
             // Window level must be restored from `CGShieldingWindowLevel()
             // + 1` back to normal in order for `toggleFullScreen` to do
             // anything
@@ -1561,7 +1575,7 @@ impl WindowDelegate {
     #[inline]
     pub fn raw_window_handle_rwh_04(&self) -> rwh_04::RawWindowHandle {
         let mut window_handle = rwh_04::AppKitHandle::empty();
-        window_handle.ns_window = self.window() as *const WinitWindow as *mut _;
+        window_handle.ns_window = self.window() as *const _ as *mut _;
         window_handle.ns_view = Retained::as_ptr(&self.contentView().unwrap()) as *mut _;
         rwh_04::RawWindowHandle::AppKit(window_handle)
     }
@@ -1570,7 +1584,7 @@ impl WindowDelegate {
     #[inline]
     pub fn raw_window_handle_rwh_05(&self) -> rwh_05::RawWindowHandle {
         let mut window_handle = rwh_05::AppKitWindowHandle::empty();
-        window_handle.ns_window = self.window() as *const WinitWindow as *mut _;
+        window_handle.ns_window = self.window() as *const _ as *mut _;
         window_handle.ns_view = Retained::as_ptr(&self.view()) as *mut _;
         rwh_05::RawWindowHandle::AppKit(window_handle)
     }

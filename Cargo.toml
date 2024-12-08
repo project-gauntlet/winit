@@ -1,6 +1,6 @@
 [package]
 name = "winit"
-version = "0.30.1"
+version = "0.30.99"
 authors = [
     "The winit contributors",
     "Pierre Krieger <pierre.krieger1708@gmail.com>",
@@ -160,6 +160,7 @@ features = [
     "NSTextInputClient",
     "NSTextInputContext",
     "NSView",
+    "NSPanel",
     "NSWindow",
     "NSWindowScripting",
     "NSWindowTabGroup",

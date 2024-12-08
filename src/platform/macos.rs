@@ -216,6 +216,8 @@ pub trait WindowAttributesExtMacOS {
     ///
     /// See [`WindowExtMacOS::set_option_as_alt`] for details on what this means if set.
     fn with_option_as_alt(self, option_as_alt: OptionAsAlt) -> Self;
+
+    fn with_kind(self, kind: WindowKind) -> Self;
 }
 
 impl WindowAttributesExtMacOS for WindowAttributes {
@@ -282,6 +284,12 @@ impl WindowAttributesExtMacOS for WindowAttributes {
     #[inline]
     fn with_option_as_alt(mut self, option_as_alt: OptionAsAlt) -> Self {
         self.platform_specific.option_as_alt = option_as_alt;
+        self
+    }
+
+    #[inline]
+    fn with_kind(mut self, kind: WindowKind) -> Self {
+        self.platform_specific.kind = kind;
         self
     }
 }
@@ -431,4 +439,13 @@ pub enum OptionAsAlt {
     /// No special handling is applied for `Option` key.
     #[default]
     None,
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum WindowKind {
+    #[default]
+    Normal,
+
+    Popup,
 }
