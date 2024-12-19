@@ -8,7 +8,7 @@ use monitor::VideoModeHandle;
 use objc2::rc::{autoreleasepool, Retained};
 use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2::{declare_class, msg_send_id, mutability, sel, ClassType, DeclaredClass};
-use objc2_app_kit::{NSAppKitVersionNumber, NSAppKitVersionNumber10_12, NSAppearance, NSApplication, NSApplicationPresentationOptions, NSBackingStoreType, NSColor, NSDraggingDestination, NSFilenamesPboardType, NSPasteboard, NSRequestUserAttentionType, NSScreen, NSView, NSWindow, NSWindowButton, NSWindowDelegate, NSWindowFullScreenButton, NSWindowLevel, NSWindowOcclusionState, NSWindowOrderingMode, NSWindowSharingType, NSWindowStyleMask, NSWindowTabbingMode, NSWindowTitleVisibility};
+use objc2_app_kit::{NSAppKitVersionNumber, NSAppKitVersionNumber10_12, NSAppearance, NSApplication, NSApplicationPresentationOptions, NSBackingStoreType, NSColor, NSDraggingDestination, NSFilenamesPboardType, NSPanel, NSPasteboard, NSRequestUserAttentionType, NSScreen, NSView, NSWindow, NSWindowButton, NSWindowDelegate, NSWindowFullScreenButton, NSWindowLevel, NSWindowOcclusionState, NSWindowOrderingMode, NSWindowSharingType, NSWindowStyleMask, NSWindowTabbingMode, NSWindowTitleVisibility};
 use objc2_foundation::{
     ns_string, CGFloat, MainThreadMarker, NSArray, NSCopying, NSDistributedNotificationCenter,
     NSObject, NSObjectNSDelayedPerforming, NSObjectNSThreadPerformAdditions, NSObjectProtocol,
@@ -20,7 +20,7 @@ use super::cursor::cursor_from_icon;
 use super::monitor::{self, flip_window_screen_coordinates, get_display_id};
 use super::observer::RunLoop;
 use super::view::WinitView;
-use super::window::{ns_window_id, WinitPanel, WinitWindow};
+use super::window::{ns_window_id, WinitPopup, WinitPanel, WinitWindow};
 use super::{ffi, Fullscreen, MonitorHandle, OsError, WindowId};
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize, Position, Size};
 use crate::error::{ExternalError, NotSupportedError, OsError as RootOsError};
@@ -531,6 +531,20 @@ fn new_window(
                 window?.as_super().retain()
             }
             WindowKind::Popup => {
+                masks |= NSWindowStyleMask::NonactivatingPanel;
+                let window: Option<Retained<WinitPopup>> = unsafe {
+                    msg_send_id![
+                        super(mtm.alloc().set_ivars(())),
+                        initWithContentRect: frame,
+                        styleMask: masks,
+                        backing: NSBackingStoreType::NSBackingStoreBuffered,
+                        defer: false,
+                    ]
+                };
+
+                window?.as_super().as_super().retain()
+            }
+            WindowKind::Panel => {
                 masks |= NSWindowStyleMask::NonactivatingPanel;
                 let window: Option<Retained<WinitPanel>> = unsafe {
                     msg_send_id![

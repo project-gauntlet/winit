@@ -121,30 +121,38 @@ declare_class!(
 
 declare_class!(
     #[derive(Debug)]
-    pub struct WinitPanel;
+    pub struct WinitPopup;
 
-    unsafe impl ClassType for WinitPanel {
-        #[inherits(NSResponder, NSObject)]
+    unsafe impl ClassType for WinitPopup {
+        #[inherits(NSWindow, NSResponder, NSObject)]
         type Super = NSPanel;
         type Mutability = mutability::MainThreadOnly;
-        const NAME: &'static str = "WinitPanel";
+        const NAME: &'static str = "WinitPopup";
     }
 
-    impl DeclaredClass for WinitPanel {}
+    impl DeclaredClass for WinitPopup {}
 
-    unsafe impl WinitPanel {
-        #[method(canBecomeMainWindow)]
-        fn can_become_main_window(&self) -> bool {
-            trace_scope!("canBecomeMainWindow");
-            true
-        }
-
+    unsafe impl WinitPopup {
         #[method(canBecomeKeyWindow)]
         fn can_become_key_window(&self) -> bool {
             trace_scope!("canBecomeKeyWindow");
             true
         }
     }
+);
+
+declare_class!(
+    #[derive(Debug)]
+    pub struct WinitPanel;
+
+    unsafe impl ClassType for WinitPanel {
+        #[inherits(NSWindow, NSResponder, NSObject)]
+        type Super = NSPanel;
+        type Mutability = mutability::MainThreadOnly;
+        const NAME: &'static str = "WinitPanel";
+    }
+
+    impl DeclaredClass for WinitPanel {}
 );
 
 pub(super) fn ns_window_id(window: &NSWindow) -> WindowId {
