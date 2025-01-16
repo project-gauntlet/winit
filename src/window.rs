@@ -1620,6 +1620,13 @@ impl Window {
         let _span = tracing::debug_span!("winit::Window::primary_monitor",).entered();
         self.window.maybe_wait_on_main(|w| w.primary_monitor().map(|inner| MonitorHandle { inner }))
     }
+
+    ///
+    #[cfg(macos_platform)]
+    pub fn active_monitor(&self) -> Option<MonitorHandle> {
+        let _span = tracing::debug_span!("winit::Window::active_monitor",).entered();
+        self.window.maybe_wait_on_main(|w| w.active_monitor().map(|inner| MonitorHandle { inner }))
+    }
 }
 
 #[cfg(feature = "rwh_06")]

@@ -1,18 +1,18 @@
 #![allow(clippy::unnecessary_cast)]
 
-use std::collections::VecDeque;
-use std::fmt;
-
 use core_foundation::array::{CFArrayGetCount, CFArrayGetValueAtIndex};
-use core_foundation::base::{CFRelease, TCFType};
+use core_foundation::base::{CFRelease, FromVoid, ItemRef, TCFType};
+use core_foundation::dictionary::CFDictionary;
+use core_foundation::number::CFNumber;
 use core_foundation::string::CFString;
-use core_graphics::display::{
-    CGDirectDisplayID, CGDisplay, CGDisplayBounds, CGDisplayCopyDisplayMode,
-};
+use core_graphics::display::{kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly, CGDirectDisplayID, CGDisplay, CGDisplayBounds, CGDisplayCopyDisplayMode, CGRect};
+use core_graphics::window::{kCGWindowBounds, kCGWindowOwnerPID};
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2_app_kit::NSScreen;
-use objc2_foundation::{ns_string, run_on_main, MainThreadMarker, NSNumber, NSPoint, NSRect};
+use objc2_app_kit::{NSScreen, NSWorkspace};
+use objc2_foundation::{ns_string, run_on_main, CGPoint, CGSize, MainThreadMarker, NSIntersectsRect, NSNumber, NSPoint, NSRect};
+use std::collections::VecDeque;
+use std::fmt;
 
 use super::ffi;
 use crate::dpi::{LogicalPosition, PhysicalPosition, PhysicalSize};
@@ -151,6 +151,63 @@ pub fn available_monitors() -> VecDeque<MonitorHandle> {
 
 pub fn primary_monitor() -> MonitorHandle {
     MonitorHandle(CGDisplay::main().id)
+}
+
+pub fn active_monitor() -> Option<MonitorHandle> {
+    // idk if auto release pool is needed
+    let display_id = objc2::rc::autoreleasepool(|_| {
+        let active_window_pid = unsafe {
+            let workspace = NSWorkspace::sharedWorkspace();
+            let pid = workspace.frontmostApplication()
+                .map(|app| app.processIdentifier());
+
+            pid
+        };
+
+        // this sometimes works incorrectly if key window is on different screen than main window of an application
+        // but actually getting key window seems to require accessibility api
+
+        CGDisplay::window_list_info(kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, None)?
+            .iter()
+            .map(|window_info| unsafe { CFDictionary::from_void(*window_info) })
+            .find(|window_info| {
+                let pid = window_info.get(unsafe { kCGWindowOwnerPID });
+                let pid = unsafe { CFNumber::from_void(*pid) };
+                pid.to_i32() == active_window_pid
+            })
+            .map(|window_info| unsafe {
+                let bounds = window_info.get(unsafe { kCGWindowBounds });
+                let bounds: ItemRef<'_, CFDictionary> = CFDictionary::from_void(*bounds);
+                let bounds = CGRect::from_dict_representation(&bounds);
+                bounds
+            })
+            .flatten()
+            .map(|window_rect| {
+                run_on_main(|mtm| {
+                    for screen in NSScreen::screens(mtm) {
+                        let rect = NSRect {
+                            origin: CGPoint {
+                                x: window_rect.origin.x,
+                                y: window_rect.origin.y
+                            },
+                            size: CGSize {
+                                height: window_rect.size.height,
+                                width: window_rect.size.width
+                            },
+                        };
+
+                        if unsafe { NSIntersectsRect(screen.frame(), rect) }.as_bool() {
+                            return Some(get_display_id(&screen))
+                        }
+                    }
+
+                    None
+                })
+            })
+            .flatten()
+    })?;
+
+    Some(MonitorHandle(display_id))
 }
 
 impl fmt::Debug for MonitorHandle {

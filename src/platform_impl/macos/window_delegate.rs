@@ -1603,6 +1603,11 @@ impl WindowDelegate {
         Some(monitor)
     }
 
+    #[inline]
+    pub fn active_monitor(&self) -> Option<MonitorHandle> {
+        monitor::active_monitor()
+    }
+
     #[cfg(feature = "rwh_04")]
     #[inline]
     pub fn raw_window_handle_rwh_04(&self) -> rwh_04::RawWindowHandle {
