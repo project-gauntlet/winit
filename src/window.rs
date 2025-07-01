@@ -3,6 +3,8 @@ use std::fmt;
 
 use crate::dpi::{PhysicalPosition, PhysicalSize, Position, Size};
 use crate::error::{ExternalError, NotSupportedError};
+#[cfg(wayland_platform)]
+use sctk::shell::wlr_layer::Layer;
 use crate::monitor::{MonitorHandle, VideoModeHandle};
 use crate::platform_impl::{self, PlatformSpecificWindowAttributes};
 
@@ -1823,6 +1825,18 @@ pub enum WindowLevel {
 
     /// The window will always be on top of normal windows.
     AlwaysOnTop,
+}
+
+
+#[cfg(wayland_platform)]
+impl From<WindowLevel> for Layer {
+    fn from(value: WindowLevel) -> Self {
+        match value {
+            WindowLevel::AlwaysOnBottom => Layer::Bottom,
+            WindowLevel::Normal => Layer::Top,
+            WindowLevel::AlwaysOnTop => Layer::Overlay,
+        }
+    }
 }
 
 /// Generic IME purposes for use in [`Window::set_ime_purpose`].
