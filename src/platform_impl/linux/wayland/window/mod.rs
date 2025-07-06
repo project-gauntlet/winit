@@ -113,48 +113,56 @@ impl Window {
                     .find(|m| m.native_identifier() == id)
                     .map(|m| m.proxy.clone())
             });
-            let layer_surface = state.layer_shell.create_layer_surface(
-                &queue_handle,
-                surface.clone(),
-                attributes
-                    .platform_specific
-                    .wayland
-                    .layer
-                    .unwrap_or(attributes.window_level.into()),
-                attributes.platform_specific.wayland.namespace.clone(),
-                output.as_ref(),
-            );
-            let window_state = WindowState::new_layer(
-                event_loop_window_target.connection.clone(),
-                &event_loop_window_target.queue_handle,
-                &state,
-                size,
-                layer_surface.clone(),
-                attributes.preferred_theme,
-            );
-            let surface_size = size.to_logical::<u32>(1.0);
-            layer_surface.set_size(surface_size.width, surface_size.height);
-            if let Some(anchor) = attributes.platform_specific.wayland.anchor {
-                layer_surface.set_anchor(anchor);
+
+            match &state.layer_shell {
+                None => {
+                    return Err(os_error!(OsError::Misc("Unable to create a layer shell surface because it is not supported by current environment")));
+                }
+                Some(layer_shell) => {
+                    let layer_surface = layer_shell.create_layer_surface(
+                        &queue_handle,
+                        surface.clone(),
+                        attributes
+                            .platform_specific
+                            .wayland
+                            .layer
+                            .unwrap_or(attributes.window_level.into()),
+                        attributes.platform_specific.wayland.namespace.clone(),
+                        output.as_ref(),
+                    );
+                    let window_state = WindowState::new_layer(
+                        event_loop_window_target.connection.clone(),
+                        &event_loop_window_target.queue_handle,
+                        &state,
+                        size,
+                        layer_surface.clone(),
+                        attributes.preferred_theme,
+                    );
+                    let surface_size = size.to_logical::<u32>(1.0);
+                    layer_surface.set_size(surface_size.width, surface_size.height);
+                    if let Some(anchor) = attributes.platform_specific.wayland.anchor {
+                        layer_surface.set_anchor(anchor);
+                    }
+                    if let Some(exclusive_zone) = attributes.platform_specific.wayland.exclusive_zone {
+                        layer_surface.set_exclusive_zone(exclusive_zone)
+                    }
+                    if let Some((top, right, bottom, left)) = attributes.platform_specific.wayland.margin {
+                        layer_surface.set_margin(top, right, bottom, left);
+                    }
+                    if let Some(keyboard_interactivity) =
+                        attributes.platform_specific.wayland.keyboard_interactivity
+                    {
+                        layer_surface.set_keyboard_interactivity(keyboard_interactivity);
+                    }
+                    if let Some((pos, size)) = attributes.platform_specific.wayland.region {
+                        let region = Region::new(compositor.as_ref())
+                            .map_err(|_err| os_error!(OsError::Misc("failed to set input region")))?;
+                        region.add(pos.x, pos.y, size.width, size.height);
+                        layer_surface.set_input_region(Some(region.wl_region()));
+                    }
+                    (WindowShell::WlrLayer { surface: layer_surface }, window_state)
+                }
             }
-            if let Some(exclusive_zone) = attributes.platform_specific.wayland.exclusive_zone {
-                layer_surface.set_exclusive_zone(exclusive_zone)
-            }
-            if let Some((top, right, bottom, left)) = attributes.platform_specific.wayland.margin {
-                layer_surface.set_margin(top, right, bottom, left);
-            }
-            if let Some(keyboard_interactivity) =
-                attributes.platform_specific.wayland.keyboard_interactivity
-            {
-                layer_surface.set_keyboard_interactivity(keyboard_interactivity);
-            }
-            if let Some((pos, size)) = attributes.platform_specific.wayland.region {
-                let region = Region::new(compositor.as_ref())
-                    .map_err(|_err| os_error!(OsError::Misc("failed to set input region")))?;
-                region.add(pos.x, pos.y, size.width, size.height);
-                layer_surface.set_input_region(Some(region.wl_region()));
-            }
-            (WindowShell::WlrLayer { surface: layer_surface }, window_state)
         } else {
             let window =
                 state.xdg_shell.create_window(surface.clone(), default_decorations, &queue_handle);

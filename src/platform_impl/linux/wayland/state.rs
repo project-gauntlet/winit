@@ -65,7 +65,7 @@ pub struct WinitState {
     pub xdg_shell: XdgShell,
 
     /// The layer shell for layer surfaces
-    pub layer_shell: LayerShell,
+    pub layer_shell: Option<LayerShell>,
 
     /// The currently present windows.
     pub windows: RefCell<AHashMap<WindowId, Arc<Mutex<WindowState>>>>,
@@ -174,7 +174,13 @@ impl WinitState {
             xdg_shell: XdgShell::bind(globals, queue_handle).map_err(WaylandError::Bind)?,
             xdg_activation: XdgActivationState::bind(globals, queue_handle).ok(),
 
-            layer_shell: LayerShell::bind(globals, queue_handle).map_err(WaylandError::Bind)?,
+            layer_shell: LayerShell::bind(globals, queue_handle)
+                .inspect_err(|err| {
+                    tracing::warn!(
+                        "Layer shell may be not supported by current environment: {err:?}"
+                    );
+                })
+                .ok(),
 
             windows: Default::default(),
             window_requests: Default::default(),
